@@ -2,6 +2,7 @@
 //! See https://cypherpunks.ca/~iang/pubs/Sphinx_Oakland09.pdf for reference.
 
 mod keys;
+mod mac;
 pub mod packet;
 mod stream;
 
