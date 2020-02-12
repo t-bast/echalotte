@@ -3,6 +3,14 @@ rust:
   - stable
   - beta
   - nightly
+cache: cargo
+install:
+  - rustup component add clippy-preview
+script:
+  - cargo build --verbose
+  - cargo test --verbose
+  - cargo doc --verbose
+  - cargo clippy --verbose
 matrix:
   allow_failures:
     - rust: nightly
