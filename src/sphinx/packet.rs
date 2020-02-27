@@ -55,11 +55,11 @@ pub struct HopPayload {
   pub payload: Vec<u8>,
 }
 
-pub fn compute_shared_secrets(session_key: Scalar, payloads: Vec<HopPayload>) -> Vec<SharedSecretAndKey> {
+pub fn compute_shared_secrets(session_key: Scalar, payloads: &[HopPayload]) -> Vec<SharedSecretAndKey> {
   let mut eph_secret = session_key;
   let mut blinding_factor = Scalar::one();
   let mut shared_secrets = Vec::new();
-  for p in &payloads {
+  for p in payloads {
     eph_secret = blinding_factor * eph_secret;
     let eph_pubkey = eph_secret * G;
     let shared_secret = SharedSecret(hash::compute(&(eph_secret * p.hop_pubkey).compress().to_bytes()));
@@ -75,15 +75,31 @@ pub fn compute_shared_secrets(session_key: Scalar, payloads: Vec<HopPayload>) ->
   shared_secrets
 }
 
+pub fn generate_filler(payloads: &[HopPayload], secrets: &[SharedSecret]) -> Vec<u8> {
+  assert!(
+    payloads.len() == secrets.len(),
+    "the number of payloads doesn't match the number of secrets"
+  );
+  let mut filler: Vec<u8> = Vec::new();
+  let payloads_and_secrets: Vec<(&HopPayload, &SharedSecret)> = payloads.iter().zip(secrets.iter()).collect(); 
+  for (p, secret) in payloads_and_secrets {
+    let rho = keys::generate_key(keys::KeyType::Stream, &secret.0);
+    let mut stream = vec![0u8; PACKET_PAYLOAD_SIZE + p.payload.len()];
+    stream::generate_stream(&rho, &mut stream);
+    filler.append(&mut vec![0u8; p.payload.len()]);
+    let to_skip = stream.len() - filler.len();
+    filler.iter_mut().zip(stream.iter().skip(to_skip)).for_each(|(x, y)| *x ^= *y);
+  }
+  filler
+}
+
 #[cfg(test)]
 mod tests {
   extern crate curve25519_dalek;
 
   use super::*;
 
-  use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT as G;
   use curve25519_dalek::ristretto::CompressedRistretto;
-  use curve25519_dalek::scalar::Scalar;
   use rand::rngs::OsRng;
   use std::collections::HashSet;
 
@@ -101,8 +117,8 @@ mod tests {
 
     let c1 = e1.compress().to_bytes();
     let c2 = e2.compress().to_bytes();
-    println!("{}", hex::encode(c1).as_str());
-    println!("{}", hex::encode(c2).as_str());
+    println!("{}", hex::encode(&c1).as_str());
+    println!("{}", hex::encode(&c2).as_str());
     assert_ne!(c1, c2);
 
     match CompressedRistretto::from_slice(&c1).decompress() {
@@ -121,28 +137,55 @@ mod tests {
     let hops = vec![
       HopPayload {
         hop_pubkey: Scalar::random(&mut csprng) * G,
-        payload: vec![1u8, 2u8],
+        payload: vec![1u8; 15],
       },
       HopPayload {
         hop_pubkey: Scalar::random(&mut csprng) * G,
-        payload: vec![3u8, 4u8, 5u8],
+        payload: vec![2u8; 42],
       },
       HopPayload {
         hop_pubkey: Scalar::random(&mut csprng) * G,
-        payload: vec![6u8],
+        payload: vec![3u8; 561],
       },
     ];
-    let shared_secrets = compute_shared_secrets(session_key, hops);
+    let shared_secrets = compute_shared_secrets(session_key, &hops);
     let secrets: HashSet<[u8; 32]> = shared_secrets.iter().map(|ss| ss.secret.0).collect();
     let eph_keys: HashSet<[u8; 32]> = shared_secrets
       .iter()
       .map(|ss| ss.eph_pubkey.compress().to_bytes())
       .collect();
     for ss in &shared_secrets {
-      println!("{}", hex::encode(ss.secret.0).as_str());
+      println!("{}", hex::encode(&ss.secret.0).as_str());
     }
     assert_eq!(shared_secrets.len(), 3);
     assert_eq!(secrets.len(), 3);
     assert_eq!(eph_keys.len(), 3);
+  }
+
+  #[test]
+  fn test_generate_filler() {
+    let mut csprng = OsRng;
+    let hops = vec![
+      HopPayload {
+        hop_pubkey: Scalar::random(&mut csprng) * G,
+        payload: vec![1u8; 16],
+      },
+      HopPayload {
+        hop_pubkey: Scalar::random(&mut csprng) * G,
+        payload: vec![2u8; 32],
+      },
+      HopPayload {
+        hop_pubkey: Scalar::random(&mut csprng) * G,
+        payload: vec![3u8; 64],
+      },
+    ];
+    let secrets = vec![
+      SharedSecret([37u8; 32]),
+      SharedSecret([56u8; 32]),
+      SharedSecret([112u8; 32]),
+    ];
+    let filler = generate_filler(&hops, &secrets);
+    println!("{}", hex::encode(&filler).as_str());
+    assert_eq!(filler.len(), 112);
   }
 }
