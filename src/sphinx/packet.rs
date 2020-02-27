@@ -13,6 +13,8 @@ use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use zeroize::Zeroize;
 
+// TODO: review which functions need to be pub
+
 /// Sphinx payloads are constant-size to avoid leaking information.
 const PACKET_PAYLOAD_SIZE: usize = 1300;
 
@@ -55,6 +57,7 @@ pub struct HopPayload {
   pub payload: Vec<u8>,
 }
 
+// TODO: zeroize session_key/eph_secrets
 pub fn compute_shared_secrets(session_key: Scalar, payloads: &[HopPayload]) -> Vec<SharedSecretAndKey> {
   let mut eph_secret = session_key;
   let mut blinding_factor = Scalar::one();
@@ -81,22 +84,43 @@ pub fn generate_filler(payloads: &[HopPayload], secrets: &[SharedSecret]) -> Vec
     "the number of payloads doesn't match the number of secrets"
   );
   let mut filler: Vec<u8> = Vec::new();
-  let payloads_and_secrets: Vec<(&HopPayload, &SharedSecret)> = payloads.iter().zip(secrets.iter()).collect(); 
+  let payloads_and_secrets: Vec<(&HopPayload, &SharedSecret)> = payloads.iter().zip(secrets.iter()).collect();
   for (p, secret) in payloads_and_secrets {
     let rho = keys::generate_key(keys::KeyType::Stream, &secret.0);
     let mut stream = vec![0u8; PACKET_PAYLOAD_SIZE + p.payload.len()];
     stream::generate_stream(&rho, &mut stream);
     filler.append(&mut vec![0u8; p.payload.len()]);
     let to_skip = stream.len() - filler.len();
-    filler.iter_mut().zip(stream.iter().skip(to_skip)).for_each(|(x, y)| *x ^= *y);
+    filler
+      .iter_mut()
+      .zip(stream.iter().skip(to_skip))
+      .for_each(|(x, y)| *x ^= *y);
   }
   filler
 }
 
+pub fn wrap(packet: &mut Packet, hop: &HopPayload, secret_and_key: &SharedSecretAndKey) {
+  // Insert hop payload.
+  let shift = hop.payload.len();
+  for i in (shift..PACKET_PAYLOAD_SIZE).rev() {
+    packet.payload[i] = packet.payload[i - shift];
+  }
+  packet.payload[0..shift].copy_from_slice(hop.payload.as_slice());
+
+  // Encrypt.
+  let rho = keys::generate_key(keys::KeyType::Stream, &secret_and_key.secret.0);
+  let mut stream = [0u8; PACKET_PAYLOAD_SIZE];
+  stream::generate_stream(&rho, &mut stream);
+  packet.payload.iter_mut().zip(stream.iter()).for_each(|(x, y)| *x ^= *y);
+
+  // Authenticate.
+  let mu = keys::generate_key(keys::KeyType::Mac, &secret_and_key.secret.0);
+  packet.hmac = mac::compute(&mu, &packet.payload);
+  packet.pubkey = secret_and_key.eph_pubkey.compress().to_bytes();
+}
+
 #[cfg(test)]
 mod tests {
-  extern crate curve25519_dalek;
-
   use super::*;
 
   use curve25519_dalek::ristretto::CompressedRistretto;
@@ -187,5 +211,27 @@ mod tests {
     let filler = generate_filler(&hops, &secrets);
     println!("{}", hex::encode(&filler).as_str());
     assert_eq!(filler.len(), 112);
+  }
+
+  #[test]
+  fn test_wrap() {
+    let mut csprng = OsRng;
+    let mut p = Packet {
+      version: 0,
+      pubkey: [0; 32],
+      payload: [0; PACKET_PAYLOAD_SIZE],
+      hmac: [0; 32],
+    };
+    let hop = HopPayload {
+      hop_pubkey: Scalar::random(&mut csprng) * G,
+      payload: vec![1u8; 16],
+    };
+    let secret = SharedSecretAndKey {
+      eph_pubkey: G,
+      secret: SharedSecret([2u8; 32]),
+    };
+    wrap(&mut p, &hop, &secret);
+    assert_eq!(p.pubkey, secret.eph_pubkey.compress().to_bytes());
+    assert_ne!(p.hmac, [0; 32]);
   }
 }
