@@ -13,15 +13,16 @@ pub enum KeyType {
   Mac,
 }
 
-pub fn generate_key(key_type: KeyType, secret: &[u8]) -> Vec<u8> {
+pub fn generate_key(key_type: KeyType, secret: &[u8]) -> [u8; 32] {
+  let mut result = [0u8; 32];
   let k: &[u8] = match key_type {
     KeyType::Stream => &[0x72, 0x68, 0x6f],
     KeyType::Mac => &[0x6d, 0x75],
   };
   let mut mac = HmacSha256::new_varkey(k).expect("HMAC can take key of any size");
   mac.input(secret);
-  let result = mac.result();
-  result.code().to_vec()
+  result.copy_from_slice(mac.result().code().as_slice());
+  result
 }
 
 #[cfg(test)]

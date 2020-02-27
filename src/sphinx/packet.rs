@@ -17,7 +17,7 @@ use zeroize::Zeroize;
 const PACKET_PAYLOAD_SIZE: usize = 1300;
 
 /// A Sphinx packet. The payload is onion-encoded but doesn't leak any information about the number
-/// of layers used.
+/// of hops used.
 pub struct Packet {
   pub version: u8,
   pub pubkey: [u8; 32],
@@ -55,14 +55,19 @@ pub struct HopPayload {
   pub payload: Vec<u8>,
 }
 
-pub fn compute_shared_secrets(session_key: Scalar, payloads: Vec<HopPayload>) -> Vec<SharedSecretAndKey> {
+pub fn compute_shared_secrets(
+  session_key: Scalar,
+  payloads: Vec<HopPayload>,
+) -> Vec<SharedSecretAndKey> {
   let mut eph_secret = session_key;
   let mut blinding_factor = Scalar::one();
   let mut shared_secrets = Vec::new();
-  for p in payloads {
+  for p in &payloads {
     eph_secret = blinding_factor * eph_secret;
     let eph_pubkey = eph_secret * G;
-    let shared_secret = SharedSecret(hash::compute(&(eph_secret * p.hop_pubkey).compress().to_bytes()));
+    let shared_secret = SharedSecret(hash::compute(
+      &(eph_secret * p.hop_pubkey).compress().to_bytes(),
+    ));
     shared_secrets.push(SharedSecretAndKey {
       eph_pubkey: eph_pubkey,
       secret: shared_secret.clone(),
@@ -106,11 +111,11 @@ mod tests {
     assert_ne!(c1, c2);
 
     match CompressedRistretto::from_slice(&c1).decompress() {
+      Some(ee1) => assert_eq!(e1, ee1),
       None => {
         println!("w00t? decompress failed...");
         assert!(false);
       }
-      Some(ee1) => assert_eq!(e1, ee1),
     };
   }
 
@@ -134,8 +139,11 @@ mod tests {
     ];
     let shared_secrets = compute_shared_secrets(session_key, hops);
     let secrets: HashSet<[u8; 32]> = shared_secrets.iter().map(|ss| ss.secret.0).collect();
-    let eph_keys: HashSet<[u8; 32]> = shared_secrets.iter().map(|ss| ss.eph_pubkey.compress().to_bytes()).collect();
-    for ss in shared_secrets.clone() {
+    let eph_keys: HashSet<[u8; 32]> = shared_secrets
+      .iter()
+      .map(|ss| ss.eph_pubkey.compress().to_bytes())
+      .collect();
+    for ss in &shared_secrets {
       println!("{}", hex::encode(ss.secret.0).as_str());
     }
     assert_eq!(shared_secrets.len(), 3);
