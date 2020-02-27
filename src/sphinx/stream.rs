@@ -20,8 +20,7 @@ mod tests {
 
   #[test]
   fn test_generate_stream() {
-    let key =
-      &hex::decode("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef").unwrap();
+    let key = &hex::decode("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef").unwrap();
     let mut stream = [0; 400];
     generate_stream(key, &mut stream);
     assert_ne!(stream.to_vec(), vec![0; 400]);

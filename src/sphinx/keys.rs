@@ -32,8 +32,7 @@ mod tests {
 
   #[test]
   fn test_generate_key() {
-    let secret =
-      &hex::decode("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef").unwrap();
+    let secret = &hex::decode("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef").unwrap();
     let k1 = generate_key(KeyType::Mac, secret);
     let k11 = generate_key(KeyType::Mac, secret);
     assert_eq!(k1, k11);

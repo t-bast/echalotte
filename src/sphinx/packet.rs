@@ -55,19 +55,14 @@ pub struct HopPayload {
   pub payload: Vec<u8>,
 }
 
-pub fn compute_shared_secrets(
-  session_key: Scalar,
-  payloads: Vec<HopPayload>,
-) -> Vec<SharedSecretAndKey> {
+pub fn compute_shared_secrets(session_key: Scalar, payloads: Vec<HopPayload>) -> Vec<SharedSecretAndKey> {
   let mut eph_secret = session_key;
   let mut blinding_factor = Scalar::one();
   let mut shared_secrets = Vec::new();
   for p in &payloads {
     eph_secret = blinding_factor * eph_secret;
     let eph_pubkey = eph_secret * G;
-    let shared_secret = SharedSecret(hash::compute(
-      &(eph_secret * p.hop_pubkey).compress().to_bytes(),
-    ));
+    let shared_secret = SharedSecret(hash::compute(&(eph_secret * p.hop_pubkey).compress().to_bytes()));
     shared_secrets.push(SharedSecretAndKey {
       eph_pubkey: eph_pubkey,
       secret: shared_secret.clone(),
