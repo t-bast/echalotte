@@ -9,11 +9,10 @@ mod stream;
 
 #[cfg(test)]
 mod tests {
-    use super::packet::*;
+    // use super::packet::*;
 
     #[test]
-    fn create_empty_packet() {
-        let p = create_packet();
-        assert_eq!(p.version, 0u8);
+    fn encrypt_and_decrypt_packet() {
+        // TODO: here we should test packet creation/decryption (viewed as a consumer of the module)
     }
 }
