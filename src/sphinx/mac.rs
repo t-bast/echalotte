@@ -9,10 +9,10 @@ use sha2::Sha256;
 type HmacSha256 = Hmac<Sha256>;
 
 pub fn compute(key: &[u8], message: &[u8]) -> [u8; 32] {
-  let mut res = [0; 32];
-  let mut mac = HmacSha256::new_varkey(key).expect("HMAC can take key of any size");
-  mac.input(message);
-  let result = mac.result();
-  res.copy_from_slice(result.code().as_slice());
-  res
+    let mut res = [0; 32];
+    let mut mac = HmacSha256::new_varkey(key).expect("HMAC can take key of any size");
+    mac.input(message);
+    let result = mac.result();
+    res.copy_from_slice(result.code().as_slice());
+    res
 }

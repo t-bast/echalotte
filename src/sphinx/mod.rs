@@ -9,11 +9,11 @@ mod stream;
 
 #[cfg(test)]
 mod tests {
-  use super::packet::*;
+    use super::packet::*;
 
-  #[test]
-  fn create_empty_packet() {
-    let p = create_packet();
-    assert_eq!(p.version, 0u8);
-  }
+    #[test]
+    fn create_empty_packet() {
+        let p = create_packet();
+        assert_eq!(p.version, 0u8);
+    }
 }
